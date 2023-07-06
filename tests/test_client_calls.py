@@ -55,7 +55,7 @@ def test_client1api_lean(admin_pass):
     main(base_model=base_model, prompt_type='human_bot', chat=False,
          stream_output=False, gradio=True, num_beams=1, block_gradio_exit=False)
 
-    os.environ['HOST'] = "http://127.0.0.1:%s" % inf_port
+    os.environ['HOST'] = f"http://127.0.0.1:{inf_port}"
 
     client1 = get_client(serialize=True)
 
@@ -63,15 +63,15 @@ def test_client1api_lean(admin_pass):
     client2 = GradioClient(os.environ['HOST'])
     client2.refresh_client()  # test refresh
 
+    prompt = 'Who are you?'
     for client in [client1, client2]:
 
         api_name = '/submit_nochat_api'  # NOTE: like submit_nochat but stable API for string dict passing
-        prompt = 'Who are you?'
         kwargs = dict(instruction_nochat=prompt)
         # pass string of dict.  All entries are optional, but expect at least instruction_nochat to be filled
         res = client.predict(str(dict(kwargs)), api_name=api_name)
 
-        print("Raw client result: %s" % res, flush=True)
+        print(f"Raw client result: {res}", flush=True)
         response = ast.literal_eval(res)['response']
 
         assert 'I am h2oGPT' in response or "I'm h2oGPT" in response or 'I’m h2oGPT' in response
@@ -82,7 +82,7 @@ def test_client1api_lean(admin_pass):
         res = client.predict(ADMIN_PASS, api_name=api_name)
         res = json.loads(res)
         assert isinstance(res, dict)
-        assert res['base_model'] == base_model, "Problem with res=%s" % res
+        assert res['base_model'] == base_model, f"Problem with res={res}"
         assert 'device' in res
         assert res['hash'] == get_githash()
 
@@ -115,7 +115,7 @@ def test_client1api_lean_chat_server():
     # pass string of dict.  All entries are optional, but expect at least instruction_nochat to be filled
     res = client.predict(str(dict(kwargs)), api_name=api_name)
 
-    print("Raw client result: %s" % res, flush=True)
+    print(f"Raw client result: {res}", flush=True)
     response = ast.literal_eval(res)['response']
 
     assert 'I am h2oGPT' in response or "I'm h2oGPT" in response or 'I’m h2oGPT' in response
@@ -474,7 +474,7 @@ def test_client_stress(repeat):
         str(dict(kwargs)),
         api_name=api_name,
     )
-    print("Raw client result: %s" % res, flush=True)
+    print(f"Raw client result: {res}", flush=True)
     assert isinstance(res, str)
     res_dict = ast.literal_eval(res)
     assert 'response' in res_dict and res_dict['response']
@@ -521,19 +521,33 @@ def test_text_generation_inference_server1():
     client = Client(host)
     print(client.generate("What is Deep Learning?", max_new_tokens=17).generated_text)
 
-    text = ""
-    for response in client.generate_stream("What is Deep Learning?", max_new_tokens=17):
-        if not response.token.special:
-            text += response.token.text
+    text = "".join(
+        response.token.text
+        for response in client.generate_stream(
+            "What is Deep Learning?", max_new_tokens=17
+        )
+        if not response.token.special
+    )
     assert 'Deep learning is a subfield of machine learning' in text
 
     # Curl Test (not really pass fail yet)
     import subprocess
-    output = subprocess.run(['curl', '%s/generate' % host, '-X', 'POST', '-d',
-                             '{"inputs":"<|prompt|>What is Deep Learning?<|endoftext|><|answer|>","parameters":{"max_new_tokens": 20, "truncate": 1024, "do_sample": false, "temperature": 0.1, "repetition_penalty": 1.2}}',
-                             '-H', 'Content-Type: application/json',
-                             '--user', 'user:bhx5xmu6UVX4'],
-                            check=True, capture_output=True).stdout.decode()
+    output = subprocess.run(
+        [
+            'curl',
+            f'{host}/generate',
+            '-X',
+            'POST',
+            '-d',
+            '{"inputs":"<|prompt|>What is Deep Learning?<|endoftext|><|answer|>","parameters":{"max_new_tokens": 20, "truncate": 1024, "do_sample": false, "temperature": 0.1, "repetition_penalty": 1.2}}',
+            '-H',
+            'Content-Type: application/json',
+            '--user',
+            'user:bhx5xmu6UVX4',
+        ],
+        check=True,
+        capture_output=True,
+    ).stdout.decode()
     text = ast.literal_eval(output)['generated_text']
     assert 'Deep learning is a subfield of machine learning' in text or \
            'Deep learning refers to a class of machine learning' in text

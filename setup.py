@@ -8,7 +8,12 @@ def parse_requirements(file_name: str) -> List[str]:
     with open(file_name) as f:
         required = f.read().splitlines()
     required = [x for x in required if not x.strip().startswith("#")]
-    required = [x if 'git+http' not in x else re.search(r"/([^/]+?)\.git", x).group(1) + ' @ ' + x for x in required]
+    required = [
+        x
+        if 'git+http' not in x
+        else re.search(r"/([^/]+?)\.git", x)[1] + ' @ ' + x
+        for x in required
+    ]
     required = [x for x in required if x]
     return required
 

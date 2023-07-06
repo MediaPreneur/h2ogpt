@@ -39,7 +39,7 @@ def get_views():
     views = {str(unescape(str(k))): v for k, v in views.items()}
     views2 = {k.replace('_', ' '): v for k, v in views.items()}
     # views has _ but pages has " "
-    views.update(views2)
+    views |= views2
     return views
 
 
@@ -51,12 +51,7 @@ class MWDumpDirectLoader(MWDumpLoader):
         self.encoding = encoding
         self.title_words_limit = title_words_limit
         self.verbose = verbose
-        if use_views:
-            # self.views = get_views()
-            # faster to use global shared values
-            self.views = global_views
-        else:
-            self.views = None
+        self.views = global_views if use_views else None
 
     def load(self) -> List[Document]:
         """Load from file path."""
@@ -70,32 +65,33 @@ class MWDumpDirectLoader(MWDumpLoader):
         for page in dump.pages:
             if self.views is not None and page.title not in self.views:
                 if self.verbose:
-                    print("Skipped %s low views" % page.title, flush=True)
+                    print(f"Skipped {page.title} low views", flush=True)
                 continue
             for revision in page:
                 if self.title_words_limit is not None:
                     num_words = len(' '.join(page.title.split('_')).split(' '))
                     if num_words > self.title_words_limit:
                         if self.verbose:
-                            print("Skipped %s" % page.title, flush=True)
+                            print(f"Skipped {page.title}", flush=True)
                         continue
                 if self.verbose:
                     if self.views is not None:
-                        print("Kept %s views: %s" % (page.title, self.views[page.title]), flush=True)
+                        print(f"Kept {page.title} views: {self.views[page.title]}", flush=True)
                     else:
-                        print("Kept %s" % page.title, flush=True)
+                        print(f"Kept {page.title}", flush=True)
 
                 code = mwparserfromhell.parse(revision.text)
                 text = code.strip_code(
                     normalize=True, collapse=True, keep_template_params=False
                 )
                 title_url = str(page.title).replace(' ', '_')
-                metadata = dict(title=page.title,
-                                source="https://en.wikipedia.org/wiki/" + title_url,
-                                id=page.id,
-                                redirect=page.redirect,
-                                views=self.views[page.title] if self.views is not None else -1,
-                                )
+                metadata = dict(
+                    title=page.title,
+                    source=f"https://en.wikipedia.org/wiki/{title_url}",
+                    id=page.id,
+                    redirect=page.redirect,
+                    views=self.views[page.title] if self.views is not None else -1,
+                )
                 metadata = {k: v for k, v in metadata.items() if v is not None}
                 docs.append(Document(page_content=text, metadata=metadata))
 
@@ -105,26 +101,22 @@ class MWDumpDirectLoader(MWDumpLoader):
 def search_index(search_term, index_filename):
     byte_flag = False
     data_length = start_byte = 0
-    index_file = open(index_filename, 'r')
-    csv_reader = csv.reader(index_file, delimiter=':')
-    for line in csv_reader:
-        if not byte_flag and search_term == line[2]:
-            start_byte = int(line[0])
-            byte_flag = True
-        elif byte_flag and int(line[0]) != start_byte:
-            data_length = int(line[0]) - start_byte
-            break
-    index_file.close()
+    with open(index_filename, 'r') as index_file:
+        csv_reader = csv.reader(index_file, delimiter=':')
+        for line in csv_reader:
+            if not byte_flag and search_term == line[2]:
+                start_byte = int(line[0])
+                byte_flag = True
+            elif byte_flag and int(line[0]) != start_byte:
+                data_length = int(line[0]) - start_byte
+                break
     return start_byte, data_length
 
 
 def get_start_bytes(index_filename):
-    index_file = open(index_filename, 'r')
-    csv_reader = csv.reader(index_file, delimiter=':')
-    start_bytes = set()
-    for line in csv_reader:
-        start_bytes.add(int(line[0]))
-    index_file.close()
+    with open(index_filename, 'r') as index_file:
+        csv_reader = csv.reader(index_file, delimiter=':')
+        start_bytes = {int(line[0]) for line in csv_reader}
     return sorted(start_bytes)
 
 
@@ -146,8 +138,7 @@ def get_documents_by_search_term(search_term):
         data = bz2.BZ2Decompressor().decompress(wiki_file.read(data_length))
 
     loader = MWDumpDirectLoader(data.decode())
-    documents = loader.load()
-    return documents
+    return loader.load()
 
 
 def get_one_chunk(wiki_filename, start_byte, end_byte, return_file=True,
@@ -165,7 +156,7 @@ def get_one_chunk(wiki_filename, start_byte, end_byte, return_file=True,
         base_tmp = "temp_wiki"
         if not os.path.isdir(base_tmp):
             os.makedirs(base_tmp, exist_ok=True)
-        filename = os.path.join(base_tmp, str(uuid.uuid4()) + ".tmp.pickle")
+        filename = os.path.join(base_tmp, f"{str(uuid.uuid4())}.tmp.pickle")
         with open(filename, 'wb') as f:
             pickle.dump(documents1, f)
         return filename
@@ -178,7 +169,7 @@ global_views = get_views()
 
 
 def get_all_documents(small_test=2, n_jobs=None, use_views=True):
-    print("DO get all wiki docs: %s" % small_test, flush=True)
+    print(f"DO get all wiki docs: {small_test}", flush=True)
     index_filename, wiki_filename = get_wiki_filenames()
     start_bytes = get_start_bytes(index_filename)
     end_bytes = start_bytes[1:]
@@ -189,9 +180,8 @@ def get_all_documents(small_test=2, n_jobs=None, use_views=True):
         end_bytes = end_bytes[:small_test]
         if n_jobs is None:
             n_jobs = 5
-    else:
-        if n_jobs is None:
-            n_jobs = os.cpu_count() // 4
+    elif n_jobs is None:
+        n_jobs = os.cpu_count() // 4
 
     # default loky backend leads to name space conflict problems
     return_file = True  # large return from joblib hangs
@@ -253,7 +243,7 @@ def get_one_pageviews(fil):
     base_tmp = "temp_wiki_pageviews"
     if not os.path.isdir(base_tmp):
         os.makedirs(base_tmp, exist_ok=True)
-    filename = os.path.join(base_tmp, str(uuid.uuid4()) + ".tmp.csv")
+    filename = os.path.join(base_tmp, f"{str(uuid.uuid4())}.tmp.csv")
     df1.to_csv(filename, index=True)
     return filename
 
@@ -288,7 +278,7 @@ def test_reduce_pageview():
     plt.hist(df['views'], bins=100, log=True)
     views_avg = np.mean(df['views'])
     views_median = np.median(df['views'])
-    plt.title("Views avg: %s median: %s" % (views_avg, views_median))
+    plt.title(f"Views avg: {views_avg} median: {views_median}")
     plt.savefig(filename.replace('.csv', '.png'))
     plt.close()
     #
@@ -300,7 +290,7 @@ def test_reduce_pageview():
     plt.hist(df['views'], bins=100, log=True)
     views_avg = np.mean(df['views'])
     views_median = np.median(df['views'])
-    plt.title("Views avg: %s median: %s" % (views_avg, views_median))
+    plt.title(f"Views avg: {views_avg} median: {views_median}")
     plt.savefig(filename.replace('.csv', '.png'))
     plt.close()
 

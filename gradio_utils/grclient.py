@@ -63,7 +63,7 @@ class GradioClient(Client):
             self.refresh_client_if_should()
             job = super().submit(*args, api_name=api_name, fn_index=fn_index)
         except Exception as e:
-            print("Hit e=%s" % str(e), flush=True)
+            print(f"Hit e={str(e)}", flush=True)
             # force reconfig in case only that
             self.refresh_client()
             job = super().submit(*args, api_name=api_name, fn_index=fn_index)
@@ -71,7 +71,10 @@ class GradioClient(Client):
         # see if immediately failed
         e = job.future._exception
         if e is not None:
-            print("GR job failed: %s %s" % (str(e), ''.join(traceback.format_tb(e.__traceback__))), flush=True)
+            print(
+                f"GR job failed: {str(e)} {''.join(traceback.format_tb(e.__traceback__))}",
+                flush=True,
+            )
             # force reconfig in case only that
             self.refresh_client()
             job = super().submit(*args, api_name=api_name, fn_index=fn_index)

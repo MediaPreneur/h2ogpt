@@ -55,8 +55,9 @@ def run_cli(  # for local function:
                                              **get_kwargs(get_model, exclude_names=['reward_type'], **locals()))
         model_dict = dict(base_model=base_model, tokenizer_base_model=tokenizer_base_model, lora_weights=lora_weights,
                           inference_server=inference_server, prompt_type=prompt_type, prompt_dict=prompt_dict)
-        model_state = dict(model=model, tokenizer=tokenizer, device=device)
-        model_state.update(model_dict)
+        model_state = (
+            dict(model=model, tokenizer=tokenizer, device=device) | model_dict
+        )
         my_db_state = [None]
         fun = partial(evaluate, model_state, my_db_state,
                       **get_kwargs(evaluate, exclude_names=['model_state', 'my_db_state'] + eval_func_param_names,
@@ -87,7 +88,6 @@ def run_cli(  # for local function:
             res_old = ''
             for gen_output in gener:
                 res = gen_output['response']
-                extra = gen_output['sources']
                 if base_model not in non_hf_types or base_model in ['llama']:
                     if not stream_output:
                         print(res)
@@ -99,7 +99,7 @@ def run_cli(  # for local function:
                     outr = res  # don't accumulate
                 else:
                     outr += res  # just is one thing
-                    if extra:
+                    if extra := gen_output['sources']:
                         # show sources at end after model itself had streamed to std rest of response
                         print(extra, flush=True)
             all_generations.append(outr + '\n')

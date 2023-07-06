@@ -54,7 +54,7 @@ def parse_rst_file(filepath):
                     current_answer += node.astext()
     if current_answer:
         qa_pairs.append((current_question, current_answer))
-    return {k: v for k, v in qa_pairs}
+    return dict(qa_pairs)
 
 
 def test_scrape_dai_docs():
@@ -160,7 +160,9 @@ def setup_dai_docs(path=None, dst="working_dir_docs", from_hf=False):
         if os.path.isdir(os.path.join(home, 'h2oai')):
             path = os.path.join(home, "h2oai/docs/**/*")
         else:
-            assert os.path.isdir(os.path.join(home, 'h2oai.superclean')), '%s does not exist' % path
+            assert os.path.isdir(
+                os.path.join(home, 'h2oai.superclean')
+            ), f'{path} does not exist'
             path = os.path.join(home, "h2oai.superclean/docs/**/*")
     import glob
     files = list(glob.glob(path, recursive=True))
@@ -192,23 +194,20 @@ def rst_to_outputs(files, min_len=30, max_len=2048 // 2 - 30):
     basedir = os.path.abspath(os.getcwd())
 
     outputs = []
+    # out_format can be one of: asciidoc, asciidoctor, beamer, biblatex, bibtex, commonmark, commonmark_x,
+    # context, csljson, docbook, docbook4, docbook5, docx, dokuwiki,
+    # dzslides, epub, epub2, epub3, fb2, gfm, haddock, html, html4, html5, icml,
+    # ipynb, jats, jats_archiving, jats_articleauthoring, jats_publishing, jira,
+    # json, latex, man,
+    # markdown, markdown_github, markdown_mmd, markdown_phpextra, markdown_strict,
+    # mediawiki, ms, muse, native, odt, opendocument, opml, org, pdf, plain, pptx,
+    # revealjs, rst, rtf, s5, slideous, slidy, tei, texinfo, textile, xwiki, zimwiki
+    out_format = 'plain'
     for fil in files:
         os.chdir(basedir)
         os.chdir(os.path.dirname(fil))
         fil = os.path.basename(fil)
-        print("Processing %s" % fil, flush=True)
-        # out_format can be one of: asciidoc, asciidoctor, beamer, biblatex, bibtex, commonmark, commonmark_x,
-        # context, csljson, docbook, docbook4, docbook5, docx, dokuwiki,
-        # dzslides, epub, epub2, epub3, fb2, gfm, haddock, html, html4, html5, icml,
-        # ipynb, jats, jats_archiving, jats_articleauthoring, jats_publishing, jira,
-        # json, latex, man,
-        # markdown, markdown_github, markdown_mmd, markdown_phpextra, markdown_strict,
-        # mediawiki, ms, muse, native, odt, opendocument, opml, org, pdf, plain, pptx,
-        # revealjs, rst, rtf, s5, slideous, slidy, tei, texinfo, textile, xwiki, zimwiki
-        out_format = 'plain'
-        # avoid extra new lines injected into text
-        extra_args = ['--wrap=preserve', '--resource path="%s" % dst']
-
+        print(f"Processing {fil}", flush=True)
         plain_list = []
         try:
             # valid for expert settings
@@ -218,13 +217,16 @@ def rst_to_outputs(files, min_len=30, max_len=2048 // 2 - 30):
                 input_plain = pypandoc.convert_text(input_subrst, format='rst', to='plain')
                 plain_list.append([input_plain, fil])
         except Exception as e:
-            print("file exception: %s %s" % (fil, str(e)), flush=True)
+            print(f"file exception: {fil} {str(e)}", flush=True)
 
         if not plain_list:
+            # avoid extra new lines injected into text
+            extra_args = ['--wrap=preserve', '--resource path="%s" % dst']
+
             # if failed to process as pieces of rst, then
             output = pypandoc.convert_file(fil, out_format, extra_args=extra_args, format='rst')
             outputs1 = get_sentences(output, length=max_len)
-            for oi, output in enumerate(outputs1):
+            for output in outputs1:
                 output = output.replace('\n\n', '\n')
                 plain_list.append([output, fil])
         outputs.extend(plain_list)
@@ -241,15 +243,13 @@ def rst_to_outputs(files, min_len=30, max_len=2048 // 2 - 30):
             new_outputs.append([output, fil])
             continue
         outputs1 = get_sentences(output, length=max_len)
-        for oi, output1 in enumerate(outputs1):
+        for output1 in outputs1:
             output1 = output1.replace('\n\n', '\n')
             new_outputs.append([output1, fil])
         num_truncated += 1
-    print('num_orig: %s num_truncated: %s' % (num_orig, num_truncated), flush=True)
+    print(f'num_orig: {num_orig} num_truncated: {num_truncated}', flush=True)
 
-    new_outputs = [[k.strip(), fil] for k, fil in new_outputs if len(k.strip()) > min_len]
-
-    return new_outputs
+    return [[k.strip(), fil] for k, fil in new_outputs if len(k.strip()) > min_len]
 
 
 def test_scrape_dai_docs_all_pandoc():
@@ -288,66 +288,82 @@ def test_config_to_json():
         for k, v in config.get_meta_dict().items():
             title = (v.title + ": ") if v.title else ''
             comment = v.comment or ''
-            if not (title or comment):
-                continue
-            toml_list.extend(
-                [
-                    {
-                        'prompt_type': 'plain',
-                        'instruction': f"<human>: What does {k} do?\n<bot>: {k.replace('_', ' ')} config.toml:  {comment or title}\n<human>:".replace(
-                            "\n", ""),
-                    },
-                    {
-                        'prompt_type': 'plain',
-                        'instruction': f"<human>: Explain {k}.\n<bot>: {k.replace('_', ' ')} config.toml:  {comment or title}\n<human>:".replace(
-                            "\n", ""),
-                    },
-                    {
-                        'prompt_type': 'plain',
-                        'instruction': f"<human>: How can I do this: {title}.\n<bot>: Set the {k.replace('_', ' ')} config.toml\n<human>:".replace(
-                            "\n", ""),
-                    } if title and comment else None,
-                    {
-                        'prompt_type': 'human_bot',
-                        'instruction': f'Explain the following expert setting for Driverless AI',
-                        'input': f"{k}",
-                        'output': f"{k.replace('_', ' ')} config.toml: {comment or title}".replace("\n", ""),
-                    },
-                    {
-                        'prompt_type': 'human_bot',
-                        'instruction': f'Explain the following expert setting for Driverless AI',
-                        'input': f"{k}",
-                        'output': f"{k.replace('_', ' ')} config.toml: {title}{comment}".replace("\n", ""),
-                    },
-                    {
-                        'prompt_type': 'human_bot',
-                        'instruction': f'Explain the following expert setting for Driverless AI',
-                        'input': f"{k.replace('_', ' ')}",
-                        'output': f"{k.replace('_', ' ')} config.toml: {title}{comment}".replace("\n", ""),
-                    },
-                    {
-                        'prompt_type': 'human_bot',
-                        'instruction': f'Explain the following expert setting for Driverless AI',
-                        'input': f"{title}",
-                        'output': f"{k.replace('_', ' ')} config.toml: {title}{comment}".replace("\n", ""),
-                    },
-                    {
-                        'prompt_type': 'human_bot',
-                        'instruction': f'Provide a short explanation of the expert setting {k}',
-                        'output': f"{k.replace('_', ' ')} config.toml: {comment or title}".replace("\n", ""),
-                    },
-                    {
-                        'prompt_type': 'human_bot',
-                        'instruction': f'Provide a detailed explanation of the expert setting {k}',
-                        'output': f"{k.replace('_', ' ')} config.toml: {title}{comment}".replace("\n", ""),
-                    },
-                ]
-            )
+            if title or comment:
+                toml_list.extend(
+                    [
+                        {
+                            'prompt_type': 'plain',
+                            'instruction': f"<human>: What does {k} do?\n<bot>: {k.replace('_', ' ')} config.toml:  {comment or title}\n<human>:".replace(
+                                "\n", ""
+                            ),
+                        },
+                        {
+                            'prompt_type': 'plain',
+                            'instruction': f"<human>: Explain {k}.\n<bot>: {k.replace('_', ' ')} config.toml:  {comment or title}\n<human>:".replace(
+                                "\n", ""
+                            ),
+                        },
+                        {
+                            'prompt_type': 'plain',
+                            'instruction': f"<human>: How can I do this: {title}.\n<bot>: Set the {k.replace('_', ' ')} config.toml\n<human>:".replace(
+                                "\n", ""
+                            ),
+                        }
+                        if title and comment
+                        else None,
+                        {
+                            'prompt_type': 'human_bot',
+                            'instruction': 'Explain the following expert setting for Driverless AI',
+                            'input': f"{k}",
+                            'output': f"{k.replace('_', ' ')} config.toml: {comment or title}".replace(
+                                "\n", ""
+                            ),
+                        },
+                        {
+                            'prompt_type': 'human_bot',
+                            'instruction': 'Explain the following expert setting for Driverless AI',
+                            'input': f"{k}",
+                            'output': f"{k.replace('_', ' ')} config.toml: {title}{comment}".replace(
+                                "\n", ""
+                            ),
+                        },
+                        {
+                            'prompt_type': 'human_bot',
+                            'instruction': 'Explain the following expert setting for Driverless AI',
+                            'input': f"{k.replace('_', ' ')}",
+                            'output': f"{k.replace('_', ' ')} config.toml: {title}{comment}".replace(
+                                "\n", ""
+                            ),
+                        },
+                        {
+                            'prompt_type': 'human_bot',
+                            'instruction': 'Explain the following expert setting for Driverless AI',
+                            'input': f"{title}",
+                            'output': f"{k.replace('_', ' ')} config.toml: {title}{comment}".replace(
+                                "\n", ""
+                            ),
+                        },
+                        {
+                            'prompt_type': 'human_bot',
+                            'instruction': f'Provide a short explanation of the expert setting {k}',
+                            'output': f"{k.replace('_', ' ')} config.toml: {comment or title}".replace(
+                                "\n", ""
+                            ),
+                        },
+                        {
+                            'prompt_type': 'human_bot',
+                            'instruction': f'Provide a detailed explanation of the expert setting {k}',
+                            'output': f"{k.replace('_', ' ')} config.toml: {title}{comment}".replace(
+                                "\n", ""
+                            ),
+                        },
+                    ]
+                )
         toml_list = [x for x in toml_list if x]
         with open("config.json", "wt") as f:
             f.write(json.dumps(toml_list, indent=2))
     except Exception as e:
-        print("Exception: %s" % str(e), flush=True)
+        print(f"Exception: {str(e)}", flush=True)
 
 
 def copy_tree(src, dst, follow_symlink=False):
@@ -359,17 +375,13 @@ def copy_tree(src, dst, follow_symlink=False):
             filename = os.path.join(path, file)
             new_filename = os.path.join(new_path, file)
             # print("%s -> %s" % (filename, new_filename))
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 atomic_copy(filename, new_filename)
-            except FileNotFoundError:
-                pass
 
 
 def atomic_move(src, dst):
-    try:
+    with contextlib.suppress(shutil.Error, FileExistsError):
         shutil.move(src, dst)
-    except (shutil.Error, FileExistsError):
-        pass
     remove(src)
 
 
@@ -408,7 +420,8 @@ def test_prep_instruct_vicuna():
     filename = 'ShareGPT_unfiltered_cleaned_split.json'
     if not os.path.exists(filename):
         os.system(
-            'wget https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/%s' % filename)
+            f'wget https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/{filename}'
+        )
     data = load_dataset("json", data_files={"train": filename})["train"]
     training_rows = []
     for i in range(data.num_rows):
@@ -425,7 +438,7 @@ def test_prep_instruct_vicuna():
             convo += f"{FROM}" + conv['value'] + "\n"
         if convo:
             training_rows.append(dict(input=convo))
-    with open(filename + ".generate_human_bot.train_plain.json", "wt") as f:
+    with open(f"{filename}.generate_human_bot.train_plain.json", "wt") as f:
         f.write(json.dumps(training_rows, indent=2))
 
 
@@ -499,11 +512,13 @@ useful_oig_files = ['unified_rallio_safety_and_prosocial.jsonl.parquet',
 @pytest.mark.parametrize("filename", OIG_DATASETS)
 def test_get_small_sample_oig_data(filename):
     if not os.path.exists(filename):
-        os.system('wget https://huggingface.co/datasets/laion/OIG/resolve/main/%s' % filename)
+        os.system(
+            f'wget https://huggingface.co/datasets/laion/OIG/resolve/main/{filename}'
+        )
     import json
     rows = []
     with open(filename, "r") as f:
-        for line in f.readlines():
+        for line in f:
             row = json.loads(line)
             rows.append(dict(input=row["text"]))
     with open(filename + POSTFIX, "w") as f:
@@ -516,7 +531,9 @@ def test_download_useful_data_as_parquet(filename):
     if dest_file not in useful_oig_files:
         pytest.skip('file declared not useful')
     if not os.path.exists(filename):
-        os.system('wget https://huggingface.co/datasets/laion/OIG/resolve/main/%s' % filename)
+        os.system(
+            f'wget https://huggingface.co/datasets/laion/OIG/resolve/main/{filename}'
+        )
     if not os.path.exists(dest_file):
         df = pd.read_json(path_or_buf=filename, lines=True)
         df.to_parquet(dest_file, index=False)
@@ -529,7 +546,7 @@ def test_merge_shuffle_small_sample_oig_data():
         with open(filename + POSTFIX, "r") as f:
             rows.extend(json.loads(f.read()))
     np.random.shuffle(rows)
-    with open("merged_shuffled_OIG_%s.json" % hashlib.sha256(str(OIG_DATASETS).encode()).hexdigest()[:10], "w") as f:
+    with open(f"merged_shuffled_OIG_{hashlib.sha256(str(OIG_DATASETS).encode()).hexdigest()[:10]}.json", "w") as f:
         f.write(json.dumps(rows, indent=2))
 
 
@@ -607,12 +624,16 @@ def test_get_open_datasets():
     # bad license: cc-by-nc-4.0
 
     from huggingface_hub import list_datasets
-    datasets = flatten_list([[x for x in list_datasets(filter=y)] for y in open_tags])
-    datasets += [x for x in list_datasets(author='openai')]
+    datasets = flatten_list([list(list_datasets(filter=y)) for y in open_tags])
+    datasets += list(list_datasets(author='openai'))
     # check all:
     all_license_tags = set(flatten_list([[y for y in x.tags if 'license' in y] for x in datasets]))
     print(len(all_license_tags))
-    open_datasets = [x for x in datasets if any([y in x.tags for y in open_tags]) or 'license:' not in str(x.tags)]
+    open_datasets = [
+        x
+        for x in datasets
+        if any(y in x.tags for y in open_tags) or 'license:' not in str(x.tags)
+    ]
     print('open_datasets', len(open_datasets))
     all_task_tags = set(flatten_list([[y for y in x.tags if 'task' in y] for x in open_datasets]))
     print('all_task_tags', len(all_task_tags))
@@ -625,15 +646,24 @@ def test_get_open_datasets():
                      'coreference-resolution', 'segmentation',
                      'word-sense-disambiguation',
                      'lemmatization']
-    task_tags = [x.replace('task_categories:', '').replace('task_ids:', '')
-                 for x in all_task_tags if not any([y in x for y in
-                                                    excluded_tags])]
+    task_tags = [
+        x.replace('task_categories:', '').replace('task_ids:', '')
+        for x in all_task_tags
+        if all(y not in x for y in excluded_tags)
+    ]
     print('task_tags', len(task_tags))
     # str(x.tags) to catch any pattern match to anything in list
-    open_tasked_datasets = [x for x in open_datasets if
-                            any([y in str([x for x in x.tags if 'task' in x]) for y in task_tags]) and
-                            not any([y in str([x for x in x.tags if 'task' in x]) for y in excluded_tags]) or
-                            'task_categories' not in str(x.tags) and 'task_ids' not in str(x.tags)]
+    open_tasked_datasets = [
+        x
+        for x in open_datasets
+        if any(y in str([x for x in x.tags if 'task' in x]) for y in task_tags)
+        and all(
+            y not in str([x for x in x.tags if 'task' in x])
+            for y in excluded_tags
+        )
+        or 'task_categories' not in str(x.tags)
+        and 'task_ids' not in str(x.tags)
+    ]
     open_tasked_datasets = [x for x in open_tasked_datasets if not x.disabled]
     open_tasked_datasets = [x for x in open_tasked_datasets if not x.gated]
     open_tasked_datasets = [x for x in open_tasked_datasets if not x.private]
@@ -761,11 +791,11 @@ def test_get_open_datasets():
 
 def do_one(data_id, num_downloads):
     from datasets import load_dataset
-    out_file = "data_%s.parquet" % str(data_id.replace('/', '_'))
+    out_file = f"data_{str(data_id.replace('/', '_'))}.parquet"
     if os.path.isfile(out_file) and os.path.getsize(out_file) > 1024 ** 3:
         return
     try:
-        print("Loading data_id %s num_downloads: %s" % (data_id, num_downloads), flush=True)
+        print(f"Loading data_id {data_id} num_downloads: {num_downloads}", flush=True)
         avail_list = None
         try:
             data = load_dataset(data_id, 'foobar')
@@ -776,17 +806,19 @@ def do_one(data_id, num_downloads):
                 avail_list = None
         if avail_list is None:
             avail_list = [None]
-        print("%s avail_list: %s" % (data_id, avail_list), flush=True)
+        print(f"{data_id} avail_list: {avail_list}", flush=True)
 
         for name in avail_list:
-            out_file = "data_%s_%s.parquet" % (str(data_id.replace('/', '_')), str(name))
+            out_file = f"data_{str(data_id.replace('/', '_'))}_{str(name)}.parquet"
             if os.path.isfile(out_file):
                 continue
             data = load_dataset(data_id, name)
             column_names_dict = data.column_names
             column_names = column_names_dict[list(column_names_dict.keys())[0]]
-            print("Processing data_id %s num_downloads: %s columns: %s" % (data_id, num_downloads, column_names),
-                  flush=True)
+            print(
+                f"Processing data_id {data_id} num_downloads: {num_downloads} columns: {column_names}",
+                flush=True,
+            )
             data_dict = data.data
             col_dict = data.num_columns
             first_col = list(col_dict.keys())[0]
@@ -799,7 +831,7 @@ def do_one(data_id, num_downloads):
     except Exception as e:
         t, v, tb = sys.exc_info()
         ex = ''.join(traceback.format_exception(t, v, tb))
-        print("Exception: %s %s" % (data_id, ex), flush=True)
+        print(f"Exception: {data_id} {ex}", flush=True)
 
 
 def test_otherlic():
@@ -934,14 +966,14 @@ def test_assemble_and_detox():
     import re
     from profanity_check import predict_prob
     df_list = []
+    max_len = 2048  # uber cutoff
     for data in useful_oig_files:
-        print("Processing %s" % data, flush=True)
+        print(f"Processing {data}", flush=True)
         df = pd.read_parquet(data)
         df = df.reset_index(drop=True)
         # chop up into human/bot interactions of no more than 10kB per row
         text_list = df[['text']].values.ravel().tolist()
         new_text = []
-        max_len = 2048  # uber cutoff
         MAX_LEN = 2048 // 2 - 30  # max len per question/answer
         for text in tqdm(text_list):
             human_starts = [m.start() for m in re.finditer('<human>: ', text)]
@@ -973,8 +1005,8 @@ def test_assemble_and_detox():
         after_rows = df.shape[0]
         print("Dropped %d rows out of %d due to alt-profanity-check" % (before_rows - after_rows, before_rows))
         df_list.append(df)
-        print("Done processing %s -> %s rows" % (data, df.shape[0]), flush=True)
-        print("So far have %d rows" % sum([len(x) for x in df_list]))
+        print(f"Done processing {data} -> {df.shape[0]} rows", flush=True)
+        print("So far have %d rows" % sum(len(x) for x in df_list))
     df_final = pd.concat(df_list)
     df_final = df_final.sample(frac=1, random_state=1234).reset_index(drop=True)
     df_final.to_parquet('h2oGPT.cleaned.human_bot.shorter.parquet', index=False)
@@ -988,7 +1020,7 @@ def test_basic_cleaning():
     for data in useful_oig_files:
         # for data in useful_oig_files[:5]:
         # for data in ['unified_openai_summarize_tldr.jsonl.parquet']:
-        print("Processing %s" % data, flush=True)
+        print(f"Processing {data}", flush=True)
         df = pd.read_parquet(data)
         df = df.reset_index(drop=True)
         # NOTE: Not correct if multiple human-bot interactions, but those dialogs even more desired
@@ -1016,7 +1048,7 @@ def test_basic_cleaning():
         df = df[df['avg_bot_words'] < max_words_per_entity]
 
         df_list.append(df)
-        print("Done processing %s -> %s rows" % (data, df.shape[0]), flush=True)
+        print(f"Done processing {data} -> {df.shape[0]} rows", flush=True)
     df_final = pd.concat(df_list)
     df_final.to_parquet('h2oGPT.cleaned.human_bot.parquet', index=False)
 
@@ -1043,11 +1075,10 @@ def parallel_apply(df, func, n_jobs=-1, **kwargs):
 
     if effective_n_jobs(n_jobs) == 1:
         return df.apply(func, **kwargs)
-    else:
-        ret = Parallel(n_jobs=n_jobs)(
-            delayed(type(df).apply)(df[s], func, **kwargs)
-            for s in gen_even_slices(_num_samples(df), effective_n_jobs(n_jobs)))
-        return pd.concat(ret)
+    ret = Parallel(n_jobs=n_jobs)(
+        delayed(type(df).apply)(df[s], func, **kwargs)
+        for s in gen_even_slices(_num_samples(df), effective_n_jobs(n_jobs)))
+    return pd.concat(ret)
 
 
 def add_better_profanity_flag(df):
@@ -1115,7 +1146,7 @@ def add_deberta_grade(df):
     micro_batch = orig_micro_batch = 16
     end = 0
     import socket
-    checkpoint = "grades.%s.pkl" % socket.gethostname()
+    checkpoint = f"grades.{socket.gethostname()}.pkl"
     grades = []
     import pickle
     if os.path.exists(checkpoint):
@@ -1207,12 +1238,12 @@ def count_human_bot_lengths(df, human=None, bot=None):
             if not list_what:
                 list_what = ['']  # handle corrupted data, very rare, leads to sizes 0
             if is_human:
-                len_human_min.append(min([len(x) for x in list_what]))
-                len_human_max.append(max([len(x) for x in list_what]))
+                len_human_min.append(min(len(x) for x in list_what))
+                len_human_max.append(max(len(x) for x in list_what))
                 len_human_mean.append(np.mean([len(x) for x in list_what]))
             else:
-                len_bot_min.append(min([len(x) for x in list_what]))
-                len_bot_max.append(max([len(x) for x in list_what]))
+                len_bot_min.append(min(len(x) for x in list_what))
+                len_bot_max.append(max(len(x) for x in list_what))
                 len_bot_mean.append(np.mean([len(x) for x in list_what]))
     df['len_human_min'] = len_human_min
     df['len_human_max'] = len_human_max

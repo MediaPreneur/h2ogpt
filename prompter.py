@@ -79,18 +79,20 @@ prompt_type_to_model_name = {
     # could be plain, but default is correct prompt_type for default TheBloke model ggml-wizardLM-7B.q4_2.bin
 }
 if os.getenv('OPENAI_API_KEY'):
-    prompt_type_to_model_name.update({
-        "openai": ["text-davinci-003", "text-curie-001", "text-babbage-001", "text-ada-001"],
+    prompt_type_to_model_name |= {
+        "openai": [
+            "text-davinci-003",
+            "text-curie-001",
+            "text-babbage-001",
+            "text-ada-001",
+        ],
         "openai_chat": ["gpt-3.5-turbo", "gpt-3.5-turbo-16k"],
-    })
+    }
 
 inv_prompt_type_to_model_name = {v.strip(): k for k, l in prompt_type_to_model_name.items() for v in l}
 inv_prompt_type_to_model_lower = {v.strip().lower(): k for k, l in prompt_type_to_model_name.items() for v in l}
 
-prompt_types_strings = []
-for p in PromptType:
-    prompt_types_strings.extend([p.name])
-
+prompt_types_strings = [p.name for p in PromptType]
 prompt_types = []
 for p in PromptType:
     prompt_types.extend([p.name, p.value, str(p.value)])

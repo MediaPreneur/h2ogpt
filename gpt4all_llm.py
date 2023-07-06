@@ -18,11 +18,11 @@ def get_model_tokenizer_gpt4all(base_model, **kwargs):
                         top_k=kwargs.get('top_k', 40),
                         n_ctx=2048 - 256)
     env_gpt4all_file = ".env_gpt4all"
-    model_kwargs.update(dotenv_values(env_gpt4all_file))
+    model_kwargs |= dotenv_values(env_gpt4all_file)
 
     if base_model == "llama":
         if 'model_path_llama' not in model_kwargs:
-            raise ValueError("No model_path_llama in %s" % env_gpt4all_file)
+            raise ValueError(f"No model_path_llama in {env_gpt4all_file}")
         model_path = model_kwargs.pop('model_path_llama')
         # FIXME: GPT4All version of llama doesn't handle new quantization, so use llama_cpp_python
         from llama_cpp import Llama
@@ -33,20 +33,24 @@ def get_model_tokenizer_gpt4all(base_model, **kwargs):
         model = Llama(model_path=model_path, **model_kwargs)
     elif base_model in "gpt4all_llama":
         if 'model_name_gpt4all_llama' not in model_kwargs and 'model_path_gpt4all_llama' not in model_kwargs:
-            raise ValueError("No model_name_gpt4all_llama or model_path_gpt4all_llama in %s" % env_gpt4all_file)
+            raise ValueError(
+                f"No model_name_gpt4all_llama or model_path_gpt4all_llama in {env_gpt4all_file}"
+            )
         model_name = model_kwargs.pop('model_name_gpt4all_llama')
         model_type = 'llama'
         from gpt4all import GPT4All as GPT4AllModel
         model = GPT4AllModel(model_name=model_name, model_type=model_type)
     elif base_model in "gptj":
         if 'model_name_gptj' not in model_kwargs and 'model_path_gptj' not in model_kwargs:
-            raise ValueError("No model_name_gpt4j or model_path_gpt4j in %s" % env_gpt4all_file)
+            raise ValueError(
+                f"No model_name_gpt4j or model_path_gpt4j in {env_gpt4all_file}"
+            )
         model_name = model_kwargs.pop('model_name_gptj')
         model_type = 'gptj'
         from gpt4all import GPT4All as GPT4AllModel
         model = GPT4AllModel(model_name=model_name, model_type=model_type)
     else:
-        raise ValueError("No such base_model %s" % base_model)
+        raise ValueError(f"No such base_model {base_model}")
     return model, FakeTokenizer(), 'cpu'
 
 
@@ -67,7 +71,7 @@ def get_model_kwargs(env_kwargs, default_kwargs, cls, exclude_list=[]):
     # default from class
     model_kwargs = {k: v.default for k, v in dict(inspect.signature(cls).parameters).items() if k not in exclude_list}
     # from our defaults
-    model_kwargs.update(default_kwargs)
+    model_kwargs |= default_kwargs
     # from user defaults
     model_kwargs.update(env_kwargs)
     # ensure only valid keys
@@ -126,7 +130,7 @@ def get_llm_gpt4all(model_name,
             dict(model=model_path, backend='gptj', callbacks=callbacks, streaming=streaming, prompter=prompter))
         llm = cls(**model_kwargs)
     else:
-        raise RuntimeError("No such model_name %s" % model_name)
+        raise RuntimeError(f"No such model_name {model_name}")
     return llm
 
 
@@ -186,7 +190,7 @@ class H2OGPT4All(gpt4all.GPT4All):
 
         verbose = False
         if verbose:
-            print("_call prompt: %s" % prompt, flush=True)
+            print(f"_call prompt: {prompt}", flush=True)
         # FIXME: GPT4ALl doesn't support yield during generate, so cannot support streaming except via itself to stdout
         return super()._call(prompt, stop=stop, run_manager=run_manager)
 
@@ -258,7 +262,7 @@ class H2OLlamaCpp(LlamaCpp):
         num_prompt_tokens = len(prompt_tokens)
         if num_prompt_tokens > self.n_ctx:
             # conservative by using int()
-            chars_per_token = int(len(prompt) / num_prompt_tokens)
+            chars_per_token = len(prompt) // num_prompt_tokens
             prompt = prompt[-self.n_ctx * chars_per_token:]
             if verbose:
                 print("reducing tokens, assuming average of %s chars/token: %s" % chars_per_token, flush=True)
@@ -271,7 +275,7 @@ class H2OLlamaCpp(LlamaCpp):
         prompt = self.prompter.generate_prompt(data_point)
 
         if verbose:
-            print("_call prompt: %s" % prompt, flush=True)
+            print(f"_call prompt: {prompt}", flush=True)
 
         if self.streaming:
             text_callback = None
@@ -282,14 +286,12 @@ class H2OLlamaCpp(LlamaCpp):
             # parent handler of streamer expects to see prompt first else output="" and lose if prompt=None in prompter
             if text_callback:
                 text_callback(prompt)
-            text = ""
-            for token in self.stream(prompt=prompt, stop=stop, run_manager=run_manager):
-                text_chunk = token["choices"][0]["text"]
-                # self.stream already calls text_callback
-                # if text_callback:
-                #    text_callback(text_chunk)
-                text += text_chunk
-            return text
+            return "".join(
+                token["choices"][0]["text"]
+                for token in self.stream(
+                    prompt=prompt, stop=stop, run_manager=run_manager
+                )
+            )
         else:
             params = self._get_parameters(stop)
             params = {**params, **kwargs}

@@ -7,8 +7,7 @@ from tests.utils import wrap_test_forked
 
 
 def nltkTokenize(text):
-    words = nltk.word_tokenize(text)
-    return words
+    return nltk.word_tokenize(text)
 
 
 import re
@@ -17,8 +16,7 @@ WORD = re.compile(r'\w+')
 
 
 def regTokenize(text):
-    words = WORD.findall(text)
-    return words
+    return WORD.findall(text)
 
 
 import time

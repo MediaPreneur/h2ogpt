@@ -78,23 +78,23 @@ def test_prompt_with_context(prompt_type, expected):
                ["How are you?", "I'm good"],
                ["Go to the market?", None]
                ]
-    print("duration1: %s %s" % (prompt_type, time.time() - t0), flush=True)
+    print(f"duration1: {prompt_type} {time.time() - t0}", flush=True)
     t0 = time.time()
     context = history_to_context(history, langchain_mode, prompt_type, prompt_dict, chat,
                                  model_max_length, memory_restriction_level,
                                  keep_sources_in_context1)
-    print("duration2: %s %s" % (prompt_type, time.time() - t0), flush=True)
+    print(f"duration2: {prompt_type} {time.time() - t0}", flush=True)
     t0 = time.time()
     instruction = history[-1][0]
 
     # get prompt
     prompter = Prompter(prompt_type, prompt_dict, debug=debug, chat=chat, stream_output=stream_output)
-    print("duration3: %s %s" % (prompt_type, time.time() - t0), flush=True)
+    print(f"duration3: {prompt_type} {time.time() - t0}", flush=True)
     t0 = time.time()
     data_point = dict(context=context, instruction=instruction, input=iinput)
     prompt = prompter.generate_prompt(data_point)
     print(prompt)
-    print("duration4: %s %s" % (prompt_type, time.time() - t0), flush=True)
+    print(f"duration4: {prompt_type} {time.time() - t0}", flush=True)
     assert prompt == expected
     assert prompt.find(source_prefix) == -1
 
