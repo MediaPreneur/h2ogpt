@@ -105,7 +105,7 @@ def get_db(sources, use_openai_embedding=False, db_type='faiss',
                                                                   use_openai_embedding=use_openai_embedding,
                                                                   hf_embedding_model=hf_embedding_model)
     else:
-        raise RuntimeError("No such db_type=%s" % db_type)
+        raise RuntimeError(f"No such db_type={db_type}")
 
     return db
 
@@ -120,8 +120,7 @@ def _get_unique_sources_in_weaviate(db):
         last_id = id_source_list[-1][0]
         result = db._client.data_object.get(class_name=db._index_name, limit=batch_size, after=last_id)
 
-    unique_sources = {source for _, source in id_source_list}
-    return unique_sources
+    return {source for _, source in id_source_list}
 
 
 def add_to_db(db, sources, db_type='faiss',
@@ -147,24 +146,30 @@ def add_to_db(db, sources, db_type='faiss',
     elif db_type == 'chroma':
         collection = get_documents(db)
         # files we already have:
-        metadata_files = set([x['source'] for x in collection['metadatas']])
+        metadata_files = {x['source'] for x in collection['metadatas']}
         if avoid_dup_by_file:
             # Too weak in case file changed content, assume parent shouldn't pass true for this for now
             raise RuntimeError("Not desired code path")
-            sources = [x for x in sources if x.metadata['source'] not in metadata_files]
         if avoid_dup_by_content:
             # look at hash, instead of page_content
             # migration: If no hash previously, avoid updating,
             #  since don't know if need to update and may be expensive to redo all unhashed files
-            metadata_hash_ids = set(
-                [x['hashid'] for x in collection['metadatas'] if 'hashid' in x and x['hashid'] not in ["None", None]])
+            metadata_hash_ids = {
+                x['hashid']
+                for x in collection['metadatas']
+                if 'hashid' in x and x['hashid'] not in ["None", None]
+            }
             # avoid sources with same hash
             sources = [x for x in sources if x.metadata.get('hashid') not in metadata_hash_ids]
             num_nohash = len([x for x in sources if not x.metadata.get('hashid')])
             print("Found %s new sources (%d have no hash in original source,"
                   " so have to reprocess for migration to sources with hash)" % (len(sources), num_nohash), flush=True)
             # get new file names that match existing file names.  delete existing files we are overridding
-            dup_metadata_files = set([x.metadata['source'] for x in sources if x.metadata['source'] in metadata_files])
+            dup_metadata_files = {
+                x.metadata['source']
+                for x in sources
+                if x.metadata['source'] in metadata_files
+            }
             print("Removing %s duplicate files from db because ingesting those as new documents" % len(
                 dup_metadata_files), flush=True)
             client_collection = db._client.get_collection(name=db._collection.name,
@@ -183,7 +188,7 @@ def add_to_db(db, sources, db_type='faiss',
         clear_embedding(db)
         save_embed(db, use_openai_embedding, hf_embedding_model)
     else:
-        raise RuntimeError("No such db_type=%s" % db_type)
+        raise RuntimeError(f"No such db_type={db_type}")
 
     new_sources_metadata = [x.metadata for x in sources]
 
@@ -207,31 +212,30 @@ def create_or_update_db(db_type, persist_directory, collection_name,
         if client.schema.exists(index_name) and not add_if_exists:
             client.schema.delete_class(index_name)
             if verbose:
-                print("Removing %s" % index_name, flush=True)
+                print(f"Removing {index_name}", flush=True)
     elif db_type == 'chroma':
         if not os.path.isdir(persist_directory) or not add_if_exists:
             if os.path.isdir(persist_directory):
                 if verbose:
-                    print("Removing %s" % persist_directory, flush=True)
+                    print(f"Removing {persist_directory}", flush=True)
                 remove(persist_directory)
             if verbose:
                 print("Generating db", flush=True)
 
-    if not add_if_exists:
-        if verbose:
+    if verbose:
+        if not add_if_exists:
             print("Generating db", flush=True)
-    else:
-        if verbose:
+        else:
             print("Loading and updating db", flush=True)
 
-    db = get_db(sources,
-                use_openai_embedding=use_openai_embedding,
-                db_type=db_type,
-                persist_directory=persist_directory,
-                langchain_mode=collection_name,
-                hf_embedding_model=hf_embedding_model)
-
-    return db
+    return get_db(
+        sources,
+        use_openai_embedding=use_openai_embedding,
+        db_type=db_type,
+        persist_directory=persist_directory,
+        langchain_mode=collection_name,
+        hf_embedding_model=hf_embedding_model,
+    )
 
 
 def get_embedding(use_openai_embedding, hf_embedding_model="sentence-transformers/all-MiniLM-L6-v2"):
@@ -389,8 +393,6 @@ class GradioInference(LLM):
             res = gr_client.predict(str(dict(client_kwargs)), api_name=api_name)
             res_dict = ast.literal_eval(res)
             text = res_dict['response']
-            return self.prompter.get_response(prompt + text, prompt=prompt,
-                                              sanitize_bot_response=self.sanitize_bot_response)
         else:
             text_callback = None
             if run_manager:
@@ -401,8 +403,7 @@ class GradioInference(LLM):
             job = gr_client.submit(str(dict(client_kwargs)), api_name=api_name)
             text0 = ''
             while not job.done():
-                outputs_list = job.communicator.job.outputs
-                if outputs_list:
+                if outputs_list := job.communicator.job.outputs:
                     res = job.communicator.job.outputs[-1]
                     res_dict = ast.literal_eval(res)
                     text = res_dict['response']
@@ -431,8 +432,9 @@ class GradioInference(LLM):
             text_chunk = text[len(text0):]
             if text_callback:
                 text_callback(text_chunk)
-            return self.prompter.get_response(prompt + text, prompt=prompt,
-                                              sanitize_bot_response=self.sanitize_bot_response)
+
+        return self.prompter.get_response(prompt + text, prompt=prompt,
+                                          sanitize_bot_response=self.sanitize_bot_response)
 
 
 class H2OHuggingFaceTextGenInference(HuggingFaceTextGenInference):
@@ -496,19 +498,21 @@ class H2OHuggingFaceTextGenInference(HuggingFaceTextGenInference):
         data_point = dict(context='', instruction=prompt, input='')
         prompt = self.prompter.generate_prompt(data_point)
 
-        gen_server_kwargs = dict(do_sample=self.do_sample,
-                                 stop_sequences=stop,
-                                 max_new_tokens=self.max_new_tokens,
-                                 top_k=self.top_k,
-                                 top_p=self.top_p,
-                                 typical_p=self.typical_p,
-                                 temperature=self.temperature,
-                                 repetition_penalty=self.repetition_penalty,
-                                 return_full_text=self.return_full_text,
-                                 seed=self.seed,
-                                 )
-        gen_server_kwargs.update(kwargs)
-
+        gen_server_kwargs = (
+            dict(
+                do_sample=self.do_sample,
+                stop_sequences=stop,
+                max_new_tokens=self.max_new_tokens,
+                top_k=self.top_k,
+                top_p=self.top_p,
+                typical_p=self.typical_p,
+                temperature=self.temperature,
+                repetition_penalty=self.repetition_penalty,
+                return_full_text=self.return_full_text,
+                seed=self.seed,
+            )
+            | kwargs
+        )
         # lower bound because client is re-used if multi-threading
         self.client.timeout = max(300, self.timeout)
 
@@ -544,12 +548,7 @@ class H2OHuggingFaceTextGenInference(HuggingFaceTextGenInference):
                 text += text_chunk
                 text = self.prompter.get_response(prompt + text, prompt=prompt,
                                                   sanitize_bot_response=self.sanitize_bot_response)
-                # stream part
-                is_stop = False
-                for stop_seq in stop:
-                    if stop_seq in response.token.text:
-                        is_stop = True
-                        break
+                is_stop = any(stop_seq in response.token.text for stop_seq in stop)
                 if is_stop:
                     break
                 if not response.token.special:

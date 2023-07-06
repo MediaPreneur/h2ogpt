@@ -8,7 +8,7 @@ from tests.utils import wrap_test_forked
 
 def get_requirements():
     req_file = "requirements.txt"
-    req_tmp_file = req_file + '.tmp.txt'
+    req_tmp_file = f'{req_file}.tmp.txt'
 
     reqs_http = []
 
@@ -21,7 +21,7 @@ def get_requirements():
                 else:
                     reqs_http.append(line.replace('\n', ''))
     reqs_http = [x for x in reqs_http if x]
-    print('reqs_http: %s' % reqs_http, flush=True)
+    print(f'reqs_http: {reqs_http}', flush=True)
 
     _REQUIREMENTS_PATH = Path(__file__).parent.with_name(req_tmp_file)
     requirements = pkg_resources.parse_requirements(_REQUIREMENTS_PATH.open())
@@ -54,11 +54,14 @@ def test_requirements():
 
     packages_all.extend(reqs_http)
     if packages_dist or packages_version:
-        print('Missing packages: %s' % packages_dist, flush=True)
-        print('Wrong version of packages: %s' % packages_version, flush=True)
-        print("Can't determine (e.g. http) packages: %s" % packages_unkn, flush=True)
+        print(f'Missing packages: {packages_dist}', flush=True)
+        print(f'Wrong version of packages: {packages_version}', flush=True)
+        print(f"Can't determine (e.g. http) packages: {packages_unkn}", flush=True)
         print('\n\nRUN THIS:\n\n', flush=True)
-        print('pip uninstall peft transformers accelerate -y ; CUDA_HOME=/usr/local/cuda-11.7 pip install %s --upgrade' % str(' '.join(packages_all)), flush=True)
+        print(
+            f"pip uninstall peft transformers accelerate -y ; CUDA_HOME=/usr/local/cuda-11.7 pip install {' '.join(packages_all)} --upgrade",
+            flush=True,
+        )
         print('\n\n', flush=True)
 
         raise ValueError(packages_all)
@@ -98,7 +101,7 @@ def test_what_latest_packages():
         with open(req_name, 'rt') as fd:
             for req in requirements.parse(fd):
                 try:
-                    print("%s==%s" % (req.name, get_version(req.name)), flush=True)
+                    print(f"{req.name}=={get_version(req.name)}", flush=True)
                 except Exception as e:
-                    print("Exception: %s" % str(e), flush=True)
+                    print(f"Exception: {str(e)}", flush=True)
 

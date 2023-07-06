@@ -49,7 +49,7 @@ def get_llama(llama_type=2):
         dest = './'
         prompt_type = 'wizard2'
     else:
-        raise ValueError("unknown llama_type=%s" % llama_type)
+        raise ValueError(f"unknown llama_type={llama_type}")
 
     makedirs(dest, exist_ok=True)
     full_path = os.path.join(dest, file)

@@ -98,7 +98,7 @@ def get_args(prompt, prompt_type, chat=False, stream_output=False,
                          document_choice=[DocumentChoices.All_Relevant.name],
                          )
     from generate import eval_func_param_names
-    assert len(set(eval_func_param_names).difference(set(list(kwargs.keys())))) == 0
+    assert not set(eval_func_param_names).difference(set(list(kwargs.keys())))
     if chat:
         # add chatbot output on end.  Assumes serialize=False
         kwargs.update(dict(chatbot=[]))
@@ -120,7 +120,7 @@ def run_client_nochat(prompt, prompt_type, max_new_tokens):
         *tuple(args),
         api_name=api_name,
     )
-    print("Raw client result: %s" % res, flush=True)
+    print(f"Raw client result: {res}", flush=True)
     res_dict = dict(prompt=kwargs['instruction_nochat'], iinput=kwargs['iinput_nochat'],
                     response=md_to_text(res))
     print(res_dict)
@@ -141,7 +141,7 @@ def run_client_nochat_api(prompt, prompt_type, max_new_tokens):
         str(dict(kwargs)),
         api_name=api_name,
     )
-    print("Raw client result: %s" % res, flush=True)
+    print(f"Raw client result: {res}", flush=True)
     res_dict = dict(prompt=kwargs['instruction_nochat'], iinput=kwargs['iinput_nochat'],
                     response=md_to_text(ast.literal_eval(res)['response']),
                     sources=ast.literal_eval(res)['sources'])
@@ -163,7 +163,7 @@ def run_client_nochat_api_lean(prompt, prompt_type, max_new_tokens):
         str(dict(kwargs)),
         api_name=api_name,
     )
-    print("Raw client result: %s" % res, flush=True)
+    print(f"Raw client result: {res}", flush=True)
     res_dict = dict(prompt=kwargs['instruction_nochat'],
                     response=md_to_text(ast.literal_eval(res)['response']),
                     sources=ast.literal_eval(res)['sources'])
@@ -208,7 +208,7 @@ def run_client_nochat_api_lean_morestuff(prompt, prompt_type='human_bot', max_ne
         str(dict(kwargs)),
         api_name=api_name,
     )
-    print("Raw client result: %s" % res, flush=True)
+    print(f"Raw client result: {res}", flush=True)
     res_dict = dict(prompt=kwargs['instruction_nochat'],
                     response=md_to_text(ast.literal_eval(res)['response']),
                     sources=ast.literal_eval(res)['sources'])
@@ -248,13 +248,11 @@ def run_client(client, prompt, args, kwargs, do_md_to_text=True, verbose=False):
         res = client.predict(*tuple(args), api_name='/instruction_bot')
         res_dict['response'] = res[0][-1][1]
         print(md_to_text(res_dict['response'], do_md_to_text=do_md_to_text))
-        return res_dict, client
     else:
         job = client.submit(*tuple(args), api_name='/instruction_bot')
         res1 = ''
         while not job.done():
-            outputs_list = job.communicator.job.outputs
-            if outputs_list:
+            if outputs_list := job.communicator.job.outputs:
                 res = job.communicator.job.outputs[-1]
                 res1 = res[0][-1][-1]
                 res1 = md_to_text(res1, do_md_to_text=do_md_to_text)
@@ -262,14 +260,15 @@ def run_client(client, prompt, args, kwargs, do_md_to_text=True, verbose=False):
             time.sleep(0.1)
         full_outputs = job.outputs()
         if verbose:
-            print('job.outputs: %s' % str(full_outputs))
+            print(f'job.outputs: {str(full_outputs)}')
         # ensure get ending to avoid race
         # -1 means last response if streaming
         # 0 means get text_output, ignore exception_text
         # 0 means get list within text_output that looks like [[prompt], [answer]]
         # 1 means get bot answer, so will have last bot answer
         res_dict['response'] = md_to_text(full_outputs[-1][0][0][1], do_md_to_text=do_md_to_text)
-        return res_dict, client
+
+    return res_dict, client
 
 
 @pytest.mark.skip(reason="For manual use against some server, no server launched")
@@ -294,22 +293,21 @@ def run_client_gen(client, prompt, args, kwargs, do_md_to_text=True, verbose=Fal
         res = client.predict(str(dict(kwargs)), api_name='/submit_nochat_api')
         res_dict['response'] = res[0]
         print(md_to_text(res_dict['response'], do_md_to_text=do_md_to_text))
-        return res_dict, client
     else:
         job = client.submit(str(dict(kwargs)), api_name='/submit_nochat_api')
         while not job.done():
-            outputs_list = job.communicator.job.outputs
-            if outputs_list:
+            if outputs_list := job.communicator.job.outputs:
                 res = job.communicator.job.outputs[-1]
                 res_dict = ast.literal_eval(res)
-                print('Stream: %s' % res_dict['response'])
+                print(f"Stream: {res_dict['response']}")
             time.sleep(0.1)
         res_list = job.outputs()
         assert len(res_list) > 0, "No response, check server"
         res = res_list[-1]
         res_dict = ast.literal_eval(res)
-        print('Final: %s' % res_dict['response'])
-        return res_dict, client
+        print(f"Final: {res_dict['response']}")
+
+    return res_dict, client
 
 
 def md_to_text(md, do_md_to_text=True):

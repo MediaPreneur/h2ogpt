@@ -66,7 +66,7 @@ class H2OTextGenerationPipeline(TextGenerationPipeline):
                 len0 = len(prompt_text)
                 prompt_text = prompt_text[-model_max_length * 10:]
                 if verbose:
-                    print("Cut of input: %s -> %s" % (len0, len(prompt_text)), flush=True)
+                    print(f"Cut of input: {len0} -> {len(prompt_text)}", flush=True)
         else:
             # unknown
             model_max_length = None
@@ -75,39 +75,27 @@ class H2OTextGenerationPipeline(TextGenerationPipeline):
         if model_max_length is not None:
             # can't wait for "hole" if not plain prompt_type, since would lose prefix like <human>:
             # For https://github.com/h2oai/h2ogpt/issues/192
-            for trial in range(0, 3):
+            for _ in range(0, 3):
                 prompt_tokens = tokenizer(prompt_text)['input_ids']
                 num_prompt_tokens = len(prompt_tokens)
                 if num_prompt_tokens > model_max_length:
                     # conservative by using int()
-                    chars_per_token = int(len(prompt_text) / num_prompt_tokens)
+                    chars_per_token = len(prompt_text) // num_prompt_tokens
                     # keep tail, where question is if using langchain
                     prompt_text = prompt_text[-model_max_length * chars_per_token:]
                     if verbose:
-                        print("reducing %s tokens, assuming average of %s chars/token for %s characters" % (
-                            num_prompt_tokens, chars_per_token, len(prompt_text)), flush=True)
+                        print(
+                            f"reducing {num_prompt_tokens} tokens, assuming average of {chars_per_token} chars/token for {len(prompt_text)} characters",
+                            flush=True,
+                        )
                 else:
                     if verbose:
-                        print("using %s tokens with %s chars" % (num_prompt_tokens, len(prompt_text)), flush=True)
+                        print(
+                            f"using {num_prompt_tokens} tokens with {len(prompt_text)} chars",
+                            flush=True,
+                        )
                     break
 
-            # Why Below False: don't limit max_new_tokens more, just rely upon stopping to reach limit of model
-            if False:
-                # if input prompt is some number of tokens, despite user request, can't have max_new_tokens more
-                #
-                assert num_prompt_tokens is not None
-                if self.prompt_type not in [PromptType.plain.name, PromptType.plain.value]:
-                    # then give room for prompt
-                    fudge = 20
-                else:
-                    fudge = 0
-                max_new_tokens = max(0, min(generate_kwargs['max_new_tokens'],
-                                            model_max_length - (num_prompt_tokens + fudge)))
-                if max_new_tokens < generate_kwargs['max_new_tokens']:
-                    if verbose:
-                        print("Reduced max_new_tokens from %s -> %s" % (
-                        generate_kwargs['max_new_tokens'], max_new_tokens))
-                    generate_kwargs['max_new_tokens'] = max_new_tokens
         return prompt_text, num_prompt_tokens
 
     def preprocess(self, prompt_text, prefix="", handle_long_generation=None, **generate_kwargs):

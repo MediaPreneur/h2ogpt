@@ -21,7 +21,6 @@ def iter_with_exception():
     yield 1
     yield 2
     raise Exception
-    yield 3
 
 
 class TestTimeoutIterator(unittest.TestCase):
@@ -39,9 +38,7 @@ class TestTimeoutIterator(unittest.TestCase):
     def test_normal_iteration_for_loop(self):
         i = iter_simple()
         it = TimeoutIterator(i)
-        iterResults = []
-        for x in it:
-            iterResults.append(x)
+        iterResults = list(it)
         self.assertEqual(iterResults, [1, 2])
 
     def test_timeout_block(self):
@@ -56,9 +53,7 @@ class TestTimeoutIterator(unittest.TestCase):
     def test_timeout_block_for_loop(self):
         i = iter_with_sleep()
         it = TimeoutIterator(i)
-        iterResults = []
-        for x in it:
-            iterResults.append(x)
+        iterResults = list(it)
         self.assertEqual(iterResults, [1, 2, 3])
 
     def test_fixed_timeout(self):
@@ -74,9 +69,7 @@ class TestTimeoutIterator(unittest.TestCase):
     def test_fixed_timeout_for_loop(self):
         i = iter_with_sleep()
         it = TimeoutIterator(i, timeout=0.5)
-        iterResults = []
-        for x in it:
-            iterResults.append(x)
+        iterResults = list(it)
         self.assertEqual(iterResults, [1, it.get_sentinel(), 2, 3])
 
     def test_timeout_update(self):

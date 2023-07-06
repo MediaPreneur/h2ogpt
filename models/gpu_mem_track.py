@@ -18,15 +18,14 @@ dtype_memory_size_dict = {
     torch.int: 32 / 8,
     torch.int16: 16 / 8,
     torch.short: 16 / 6,
-    torch.uint8: 8 / 8,
-    torch.int8: 8 / 8,
+    torch.uint8: 1,
+    torch.int8: 1,
 }
 # compatibility of torch1.0
 if getattr(torch, "bfloat16", None) is not None:
     dtype_memory_size_dict[torch.bfloat16] = 16 / 8
 if getattr(torch, "bool", None) is not None:
-    dtype_memory_size_dict[
-        torch.bool] = 8 / 8  # pytorch use 1 byte for a bool, see https://github.com/pytorch/pytorch/issues/41571
+    dtype_memory_size_dict[torch.bool] = 1
 
 
 def get_mem_space(x):
@@ -62,7 +61,9 @@ class MemTracker(object):
     def __init__(self, detail=True, path='', verbose=False, device=0, log_to_disk=False):
         self.print_detail = detail
         self.last_tensor_sizes = set()
-        self.gpu_profile_fn = path + f'{datetime.datetime.now():%d-%b-%y-%H:%M:%S}-gpu_mem_track.txt'
+        self.gpu_profile_fn = (
+            f'{path}{datetime.datetime.now():%d-%b-%y-%H:%M:%S}-gpu_mem_track.txt'
+        )
         self.verbose = verbose
         self.begin = True
         self.device = device
@@ -79,7 +80,7 @@ class MemTracker(object):
                     yield tensor
             except Exception as e:
                 if self.verbose:
-                    print('A trivial exception occured: {}'.format(e))
+                    print(f'A trivial exception occured: {e}')
 
     def get_tensor_usage(self):
         sizes = [np.prod(np.array(tensor.size())) * get_mem_space(tensor.dtype) for tensor in self.get_tensors()]
@@ -101,13 +102,9 @@ class MemTracker(object):
         Track the GPU memory usage
         """
         frameinfo = inspect.stack()[1]
-        where_str = frameinfo.filename + ' line ' + str(frameinfo.lineno) + ': ' + frameinfo.function
+        where_str = f'{frameinfo.filename} line {str(frameinfo.lineno)}: {frameinfo.function}'
 
-        if self.log_to_disk:
-            file_name = self.gpu_profile_fn
-        else:
-            file_name = None
-
+        file_name = self.gpu_profile_fn if self.log_to_disk else None
         with file_writer(file_name) as f:
 
             if self.begin:

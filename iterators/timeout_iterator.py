@@ -85,7 +85,7 @@ class TimeoutIterator:
             if isinstance(data, StopIteration):
                 raise data
             ex = ''.join(traceback.format_tb(data.__traceback__))
-            print("Generation Failed: %s %s" % (str(data), str(ex)), flush=True)
+            print(f"Generation Failed: {str(data)} {ex}", flush=True)
             if self._raise_on_exception:
                 raise data
             else:

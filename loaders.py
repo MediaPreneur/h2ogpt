@@ -16,9 +16,11 @@ def get_loaders(model_name, reward_type, llama_type=None):
     elif 'mbart-' in model_name.lower():
         from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
         return MBartForConditionalGeneration, MBart50TokenizerFast
-    elif 't5' == model_name.lower() or \
-         't5-' in model_name.lower() or \
-         'flan-' in model_name.lower():
+    elif (
+        model_name.lower() == 't5'
+        or 't5-' in model_name.lower()
+        or 'flan-' in model_name.lower()
+    ):
         from transformers import AutoTokenizer, T5ForConditionalGeneration
         return T5ForConditionalGeneration, AutoTokenizer
     elif 'bigbird' in model_name:

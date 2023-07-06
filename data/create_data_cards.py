@@ -100,16 +100,16 @@ def test_create_data_cards(dataset_name, link_to_source):
     try:
         repo = huggingface_hub.Repository(
             local_dir=dataset_name,
-            clone_from="h2oai/%s" % dataset_name,
+            clone_from=f"h2oai/{dataset_name}",
             repo_type="dataset",
             skip_lfs_files=True,
             token=True,
         )
         repo.git_pull()
     except Exception as e:
-        print(str(e))
+        print(e)
         print("call 'huggingface_cli login' first and provide access token with write permission")
-    dataset = load_dataset("h2oai/%s" % dataset_name)["train"]
+    dataset = load_dataset(f"h2oai/{dataset_name}")["train"]
 
     pd.set_option('display.max_columns', None)
     with open("README-template.md", "r") as f:
@@ -141,4 +141,4 @@ def test_create_data_cards(dataset_name, link_to_source):
         repo.commit("Update README.md")
         repo.push_to_hub()
     except Exception as e:
-        print(str(e))
+        print(e)

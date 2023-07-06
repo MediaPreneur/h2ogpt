@@ -30,10 +30,7 @@ logger = logging.get_logger(__name__)
 class Linear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         ret = input @ self.weight.T
-        if self.bias is None:
-            return ret
-        else:
-            return ret + self.bias
+        return ret if self.bias is None else ret + self.bias
 
 
 from einops import rearrange
@@ -87,7 +84,7 @@ class RotaryEmbedding(torch.nn.Module):
             sin_cached = sin_cached.type(dtype)
 
             return cos_cached, sin_cached
-        elif seq_len != self.seq_len_cached or not self.use_cache:
+        elif seq_len != self.seq_len_cached:
             self.seq_len_cached = seq_len
             t = torch.arange(seq_len, device=device).type_as(self.inv_freq)
             freqs = torch.einsum("i,j->ij", t, self.inv_freq)
@@ -122,8 +119,9 @@ def _make_causal_mask(
     if past_key_values_length > 0:
         mask[:, :past_key_values_length] = False
 
-    expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
-    return expanded_mask
+    return mask[None, None, :, :].expand(
+        batch_size, 1, target_length, target_length + past_key_values_length
+    )
 
 
 def _expand_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
@@ -212,12 +210,11 @@ class Attention(nn.Module):
             query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
             value: [batch_size, seq_length, num_heads, head_dim]
         """
+        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
         if not self.multi_query:
-            batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
             fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
             return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
         else:
-            batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
             fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads + 2, self.head_dim)
             return fused_qkv[..., :-2, :], fused_qkv[..., [-2], :], fused_qkv[..., [-1], :]
 
@@ -283,11 +280,7 @@ class Attention(nn.Module):
 
         _, kv_length, _ = key_layer.shape
 
-        if use_cache is True:
-            present = (key_layer, value_layer)
-        else:
-            present = None
-
+        present = (key_layer, value_layer) if use_cache else None
         if alibi is None:
             query_layer_ = query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim)
             key_layer_ = key_layer.reshape(batch_size, self.num_kv, -1, self.head_dim)
@@ -305,7 +298,6 @@ class Attention(nn.Module):
 
             outputs = (output_tensor, present)
             assert not output_attentions  # not supported.
-            return outputs
         else:
             attention_mask_float = (attention_mask * 1.0).masked_fill(attention_mask, -1e9).to(torch.bfloat16)
             matmul_result = query_layer @ key_layer.transpose(-1, -2)
@@ -316,7 +308,7 @@ class Attention(nn.Module):
             # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
             input_dtype = attention_scores.dtype
             # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
-            if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
+            if input_dtype in [torch.float16, torch.bfloat16]:
                 attention_scores = attention_scores.to(torch.float32)
             # attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
             attention_probs = F.softmax(
@@ -345,7 +337,8 @@ class Attention(nn.Module):
             if output_attentions:
                 outputs += (attention_probs,)
 
-            return outputs
+
+        return outputs
 
 
 class MLP(nn.Module):
@@ -425,12 +418,7 @@ class DecoderLayer(nn.Module):
 
         output = dropout_add(mlp_output, residual, self.config.hidden_dropout, training=self.training)
 
-        if use_cache:
-            outputs = (output,) + outputs
-        else:
-            outputs = (output,) + outputs[1:]
-
-        return outputs  # hidden_states, present, attentions
+        return (output,) + outputs if use_cache else (output,) + outputs[1:]
 
 
 class RWPreTrainedModel(PreTrainedModel):
@@ -450,7 +438,7 @@ class RWPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
-        if isinstance(module, nn.Linear) or isinstance(module, Linear):
+        if isinstance(module, (nn.Linear, Linear)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -575,7 +563,7 @@ class RWModel(RWPreTrainedModel):
                 " passing `position_ids`.",
                 FutureWarning,
             )
-        if len(deprecated_arguments) > 0:
+        if deprecated_arguments:
             raise ValueError(f"Got unexpected arguments: {deprecated_arguments}")
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -762,7 +750,7 @@ class RWForCausalLM(RWPreTrainedModel):
                 " passing `position_ids`.",
                 FutureWarning,
             )
-        if len(deprecated_arguments) > 0:
+        if deprecated_arguments:
             raise ValueError(f"Got unexpected arguments: {deprecated_arguments}")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -871,7 +859,7 @@ class RWForSequenceClassification(RWPreTrainedModel):
                 " passing `position_ids`.",
                 FutureWarning,
             )
-        if len(deprecated_arguments) > 0:
+        if deprecated_arguments:
             raise ValueError(f"Got unexpected arguments: {deprecated_arguments}")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -900,16 +888,15 @@ class RWForSequenceClassification(RWPreTrainedModel):
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
             sequence_lengths = -1
-        else:
-            if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(dim=-1) - 1
-            else:
-                sequence_lengths = -1
-                logger.warning(
-                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-                )
+        elif input_ids is None:
+            sequence_lengths = -1
+            logger.warning(
+                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+            )
 
+        else:
+            sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(dim=-1) - 1
         pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
 
         loss = None
@@ -917,7 +904,7 @@ class RWForSequenceClassification(RWPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and labels.dtype in [torch.long, torch.int]:
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -994,7 +981,7 @@ class RWForTokenClassification(RWPreTrainedModel):
                 " passing `position_ids`.",
                 FutureWarning,
             )
-        if len(deprecated_arguments) > 0:
+        if deprecated_arguments:
             raise ValueError(f"Got unexpected arguments: {deprecated_arguments}")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

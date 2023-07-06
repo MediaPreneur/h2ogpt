@@ -36,7 +36,7 @@ class H2OImageCaptionLoader(ImageCaptionLoader):
                  load_half=False,
                  min_new_tokens=20,
                  max_tokens=50):
-        if blip_model is None or blip_model is None:
+        if blip_model is None:
             blip_processor = "Salesforce/blip-image-captioning-base"
             blip_model = "Salesforce/blip-image-captioning-base"
 
@@ -73,18 +73,14 @@ class H2OImageCaptionLoader(ImageCaptionLoader):
                 "`pip install transformers`."
             )
         self.set_context()
-        if self.caption_gpu:
-            if self.gpu_id == 'auto':
-                # blip2 has issues with multi-GPU.  Error says need to somehow set language model in device map
-                # device_map = 'auto'
-                device_map = {"": 0}
-            else:
-                if self.device == 'cuda':
-                    device_map = {"": self.gpu_id}
-                else:
-                    device_map = {"": 'cpu'}
-        else:
+        if self.caption_gpu and self.gpu_id != 'auto' and self.device == 'cuda':
+            device_map = {"": self.gpu_id}
+        elif self.caption_gpu and self.gpu_id != 'auto' or not self.caption_gpu:
             device_map = {"": 'cpu'}
+        else:
+            # blip2 has issues with multi-GPU.  Error says need to somehow set language model in device map
+            # device_map = 'auto'
+            device_map = {"": 0}
         import torch
         with torch.no_grad():
             with self.context_class(self.device):
@@ -108,17 +104,24 @@ class H2OImageCaptionLoader(ImageCaptionLoader):
                     else:
                         from transformers import BlipForConditionalGeneration, BlipProcessor
                         self.load_half = False  # not supported
-                        if self.caption_gpu:
-                            if device_map == 'auto':
-                                # Blip doesn't support device_map='auto'
-                                if self.device == 'cuda':
-                                    if self.gpu_id == 'auto':
-                                        device_map = {"": 0}
-                                    else:
-                                        device_map = {"": self.gpu_id}
-                                else:
-                                    device_map = {"": 'cpu'}
-                        else:
+                        if (
+                            self.caption_gpu
+                            and device_map == 'auto'
+                            and self.device == 'cuda'
+                            and self.gpu_id == 'auto'
+                        ):
+                            device_map = {"": 0}
+                        elif (
+                            self.caption_gpu
+                            and device_map == 'auto'
+                            and self.device == 'cuda'
+                        ):
+                            device_map = {"": self.gpu_id}
+                        elif (
+                            self.caption_gpu
+                            and device_map == 'auto'
+                            or not self.caption_gpu
+                        ):
                             device_map = {"": 'cpu'}
                         self.processor = BlipProcessor.from_pretrained(self.blip_processor, device_map=device_map)
                         self.model = BlipForConditionalGeneration.from_pretrained(self.blip_model,

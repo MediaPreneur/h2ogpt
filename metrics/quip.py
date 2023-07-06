@@ -106,24 +106,18 @@ class Quip(evaluate.Metric):
     def __init__(self, **kwargs):
 
         self.set_common = None
-        if False:
-            common_words_file = "data/NGSL_1.2_stats.csv.zip"
-            if os.path.isfile(common_words_file):
-                df = pd.read_csv(common_words_file)
-                self.set_common = set(df['Lemma'].values.tolist())
-        else:
-            # https://norvig.com/ngrams/count_1w.txt
-            common_words_file = "data/count_1w.txt.zip"
-            if os.path.isfile(common_words_file):
-                df = pd.read_csv(common_words_file, names=["word", "freq"], header=None, sep='\t')
-                df = df.head(1000)
-                self.set_common = set(df['word'].values.tolist())
-                for k in list(string.ascii_lowercase):
+        # https://norvig.com/ngrams/count_1w.txt
+        common_words_file = "data/count_1w.txt.zip"
+        if os.path.isfile(common_words_file):
+            df = pd.read_csv(common_words_file, names=["word", "freq"], header=None, sep='\t')
+            df = df.head(1000)
+            self.set_common = set(df['word'].values.tolist())
+            for k in list(string.ascii_lowercase):
+                if k in self.set_common:
                     keep = {'i', 'I', 'A', 'a'}
-                    if k in self.set_common:
-                        if k in keep:
-                            continue
-                        self.set_common.remove(k)
+                    if k in keep:
+                        continue
+                    self.set_common.remove(k)
 
         super().__init__(**kwargs)
 
@@ -200,15 +194,13 @@ class Quip(evaluate.Metric):
         residual = pred_ngrams.difference(ref_ngrams)
         if return_match_count:
             return len(pred_ngrams) - len(residual)
-        else:
-            if not return_match_fraction_by_pred_length:
-                # Score = 0.0: No match
-                # Score = 1.0: Perfect match
-                return 1.0 - len(residual) / len(pred_ngrams)
-            else:
-                # FIXME: only works with 1 prediction
-                nmatches = len(pred_ngrams) - len(residual)
-                return min(1.0, nmatches / len(predictions[0].split()))
+        if not return_match_fraction_by_pred_length:
+            # Score = 0.0: No match
+            # Score = 1.0: Perfect match
+            return 1.0 - len(residual) / len(pred_ngrams)
+        # FIXME: only works with 1 prediction
+        nmatches = len(pred_ngrams) - len(residual)
+        return min(1.0, nmatches / len(predictions[0].split()))
 
     def get_reduced_size(self, reduced_query, verbose=True):
         reduced_query_words = reduced_query.split(' ')
@@ -217,4 +209,4 @@ class Quip(evaluate.Metric):
         frac_common = num_common / len(reduced_query) if reduced_query else 0
         # FIXME: report to user bad query that uses too many common words
         if verbose:
-            print("frac_common: %s" % frac_common, flush=True)
+            print(f"frac_common: {frac_common}", flush=True)

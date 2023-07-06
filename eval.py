@@ -66,7 +66,8 @@ def run_eval(  # for local function:
             eval_filename = 'ShareGPT_V3_unfiltered_cleaned_split_no_imsorry.json'
             if not os.path.isfile(eval_filename):
                 os.system(
-                    'wget https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/%s' % eval_filename)
+                    f'wget https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/{eval_filename}'
+                )
             import json
             data = json.load(open(eval_filename, 'rt'))
             # focus on data that starts with human, else likely chopped from other data
@@ -113,13 +114,7 @@ def run_eval(  # for local function:
         used_base_model = str(base_model.split('/')[-1])
         used_lora_weights = str(lora_weights.split('/')[-1])
         used_inference_server = str(inference_server.split('/')[-1])
-    eval_out_filename = "df_scores_%s_%s_%s_%s_%s_%s_%s.parquet" % (num_examples, eval_prompts_only_num,
-                                                                    eval_prompts_only_seed,
-                                                                    eval_as_output,
-                                                                    used_base_model,
-                                                                    used_lora_weights,
-                                                                    used_inference_server,
-                                                                    )
+    eval_out_filename = f"df_scores_{num_examples}_{eval_prompts_only_num}_{eval_prompts_only_seed}_{eval_as_output}_{used_base_model}_{used_lora_weights}_{used_inference_server}.parquet"
     eval_out_filename = os.path.join(scoring_path, eval_out_filename)
 
     # torch.device("cuda") leads to cuda:x cuda:y mismatches for multi-GPU consistently
@@ -172,7 +167,7 @@ def run_eval(  # for local function:
             clear_torch_cache()
             print("")
             print("START" + "=" * 100)
-            print("Question: %s %s" % (instruction, ('input=%s' % iinput if iinput else '')))
+            print(f"Question: {instruction} {f'input={iinput}' if iinput else ''}")
             print("-" * 105)
             # fun yields as generator, so have to iterate over it
             # Also means likely do NOT want --stream_output=True, else would show all generations
@@ -208,18 +203,22 @@ def run_eval(  # for local function:
                     try:
                         score = torch.sigmoid(smodel(**inputs).logits[0].float()).cpu().detach().numpy()[0]
                     except torch.cuda.OutOfMemoryError as e:
-                        print("GPU OOM 1: question: %s answer: %s exception: %s" % (prompt, res, str(e)),
-                              flush=True)
+                        print(
+                            f"GPU OOM 1: question: {prompt} answer: {res} exception: {str(e)}",
+                            flush=True,
+                        )
                         traceback.print_exc()
                         score = 0.0
                         clear_torch_cache()
-                    except (Exception, RuntimeError) as e:
+                    except Exception as e:
                         if 'Expected all tensors to be on the same device' in str(e) or \
                                 'expected scalar type Half but found Float' in str(e) or \
                                 'probability tensor contains either' in str(e) or \
                                 'cublasLt ran into an error!' in str(e):
-                            print("GPU error: question: %s answer: %s exception: %s" % (prompt, res, str(e)),
-                                  flush=True)
+                            print(
+                                f"GPU error: question: {prompt} answer: {res} exception: {str(e)}",
+                                flush=True,
+                            )
                             traceback.print_exc()
                             score = 0.0
                             clear_torch_cache()
@@ -235,9 +234,11 @@ def run_eval(  # for local function:
                     plt.hist(df_scores['score'], bins=20)
                     score_avg = np.mean(df_scores['score'])
                     score_median = np.median(df_scores['score'])
-                    print("SCORE %s: %s  So far: AVG: %s MEDIAN: %s" % (exi, score, score_avg, score_median),
-                          flush=True)
-                    plt.title("Score avg: %s median: %s" % (score_avg, score_median))
+                    print(
+                        f"SCORE {exi}: {score}  So far: AVG: {score_avg} MEDIAN: {score_median}",
+                        flush=True,
+                    )
+                    plt.title(f"Score avg: {score_avg} median: {score_median}")
                     plt.savefig(eval_out_filename.replace('.parquet', '.png'))
                     plt.close()
 
@@ -248,5 +249,5 @@ def run_eval(  # for local function:
                 t2 - t1, t2 - t0, (t2 - t0) / (1 + exi)))
         t1 = time.time()
         print("Total time taken: %.4f about %.4g per example" % (t1 - t0, (t1 - t0) / num_examples))
-        print("Score avg: %s median: %s" % (score_avg, score_median), flush=True)
+        print(f"Score avg: {score_avg} median: {score_median}", flush=True)
     return eval_out_filename

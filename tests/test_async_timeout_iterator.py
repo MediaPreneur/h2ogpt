@@ -21,7 +21,6 @@ async def iter_with_exception():
     yield 1
     yield 2
     raise Exception
-    yield 3
 
 
 class TestTimeoutIterator(unittest.TestCase):

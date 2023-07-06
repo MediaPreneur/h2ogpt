@@ -234,18 +234,20 @@ def test_create_model_cards(model_name, base_model, dataset, training_logs, eval
     try:
         repo = huggingface_hub.Repository(
             local_dir=model_name,
-            clone_from="h2oai/%s" % model_name,
+            clone_from=f"h2oai/{model_name}",
             skip_lfs_files=True,
             token=True,
         )
         repo.git_pull()
     except:
         print("call 'huggingface_cli login' first and provide access token with write permission")
-    model = AutoModelForCausalLM.from_pretrained("h2oai/%s" % model_name,
-                                                 local_files_only=False,
-                                                 trust_remote_code=True,
-                                                 torch_dtype=torch.float16,
-                                                 device_map="auto")
+    model = AutoModelForCausalLM.from_pretrained(
+        f"h2oai/{model_name}",
+        local_files_only=False,
+        trust_remote_code=True,
+        torch_dtype=torch.float16,
+        device_map="auto",
+    )
     model_arch = str(model)
     model_config = str(model.config)
     with open("README-template.md", "r") as f:
@@ -287,4 +289,4 @@ def test_create_model_cards(model_name, base_model, dataset, training_logs, eval
         repo.commit("Update README.md")
         repo.push_to_hub()
     except Exception as e:
-        print(str(e))
+        print(e)

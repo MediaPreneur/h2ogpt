@@ -11,16 +11,19 @@ def glob_to_db(user_path, chunk=True, chunk_size=512, verbose=False,
                enable_captions=True, captions_model=None,
                caption_loader=None,
                enable_ocr=False):
-    sources1 = path_to_docs(user_path, verbose=verbose, fail_any_exception=fail_any_exception,
-                            n_jobs=n_jobs,
-                            chunk=chunk,
-                            chunk_size=chunk_size, url=url,
-                            enable_captions=enable_captions,
-                            captions_model=captions_model,
-                            caption_loader=caption_loader,
-                            enable_ocr=enable_ocr,
-                            )
-    return sources1
+    return path_to_docs(
+        user_path,
+        verbose=verbose,
+        fail_any_exception=fail_any_exception,
+        n_jobs=n_jobs,
+        chunk=chunk,
+        chunk_size=chunk_size,
+        url=url,
+        enable_captions=enable_captions,
+        captions_model=captions_model,
+        caption_loader=caption_loader,
+        enable_ocr=enable_ocr,
+    )
 
 
 def make_db_main(use_openai_embedding: bool = False,
@@ -96,25 +99,24 @@ def make_db_main(use_openai_embedding: bool = False,
         if hf_embedding_model is None:
             # if no GPUs, use simpler embedding model to avoid cost in time
             hf_embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
-    else:
-        if hf_embedding_model is None:
-            # if still None, then set default
-            hf_embedding_model = 'hkunlp/instructor-large'
+    elif hf_embedding_model is None:
+        # if still None, then set default
+        hf_embedding_model = 'hkunlp/instructor-large'
 
     if download_all:
-        print("Downloading all (and unzipping): %s" % all_db_zips, flush=True)
+        print(f"Downloading all (and unzipping): {all_db_zips}", flush=True)
         get_some_dbs_from_hf(download_dest, db_zips=all_db_zips)
         if verbose:
             print("DONE", flush=True)
         return db, collection_name
     elif download_some:
-        print("Downloading some (and unzipping): %s" % some_db_zips, flush=True)
+        print(f"Downloading some (and unzipping): {some_db_zips}", flush=True)
         get_some_dbs_from_hf(download_dest, db_zips=some_db_zips)
         if verbose:
             print("DONE", flush=True)
         return db, collection_name
     elif download_one:
-        print("Downloading %s (and unzipping)" % download_one, flush=True)
+        print(f"Downloading {download_one} (and unzipping)", flush=True)
         get_some_dbs_from_hf(download_dest, db_zips=[[download_one, '', 'Unknown License']])
         if verbose:
             print("DONE", flush=True)
@@ -130,17 +132,16 @@ def make_db_main(use_openai_embedding: bool = False,
                                                blip_processor=captions_model,
                                                caption_gpu=caption_gpu,
                                                ).load_model()
+    elif enable_captions:
+        caption_loader = 'gpu' if caption_gpu else 'cpu'
     else:
-        if enable_captions:
-            caption_loader = 'gpu' if caption_gpu else 'cpu'
-        else:
-            caption_loader = False
+        caption_loader = False
 
     if verbose:
         print("Getting sources", flush=True)
     assert user_path is not None or url is not None, "Can't have both user_path and url as None"
     if not url:
-        assert os.path.isdir(user_path), "user_path=%s does not exist" % user_path
+        assert os.path.isdir(user_path), f"user_path={user_path} does not exist"
     sources = glob_to_db(user_path, chunk=chunk, chunk_size=chunk_size, verbose=verbose,
                          fail_any_exception=fail_any_exception, n_jobs=n_jobs, url=url,
                          enable_captions=enable_captions,
@@ -149,10 +150,10 @@ def make_db_main(use_openai_embedding: bool = False,
                          enable_ocr=enable_ocr,
                          )
     exceptions = [x for x in sources if x.metadata.get('exception')]
-    print("Exceptions: %s" % exceptions, flush=True)
+    print(f"Exceptions: {exceptions}", flush=True)
     sources = [x for x in sources if 'exception' not in x.metadata]
 
-    assert len(sources) > 0, "No sources found"
+    assert sources, "No sources found"
     db = create_or_update_db(db_type, persist_directory, collection_name,
                              sources, use_openai_embedding, add_if_exists, verbose,
                              hf_embedding_model)
